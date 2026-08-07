@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Haldia LPG Bottling Plant — Inventory Control</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🛢️</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Oswald:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<div class="app">
+
+  <!-- ===== Sidebar ===== -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg viewBox="0 0 48 48" width="34" height="34">
+          <rect x="16" y="6" width="16" height="8" rx="2" fill="var(--accent)"/>
+          <rect x="10" y="14" width="28" height="30" rx="6" fill="var(--accent)"/>
+          <rect x="14" y="20" width="20" height="3" fill="rgba(0,0,0,.25)"/>
+          <rect x="14" y="27" width="20" height="3" fill="rgba(0,0,0,.25)"/>
+          <rect x="14" y="34" width="12" height="3" fill="rgba(0,0,0,.25)"/>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <strong>HALDIA LPG</strong>
+        <span>Bottling Plant · Inventory Control</span>
+      </div>
+    </div>
+
+    <nav class="nav" id="mainNav">
+      <button class="nav-item active" data-view="dashboard">
+        <span class="nav-ico">◈</span> Dashboard
+      </button>
+      <button class="nav-item" data-view="inventory">
+        <span class="nav-ico">▤</span> Inventory
+      </button>
+      <button class="nav-item" data-view="add">
+        <span class="nav-ico">＋</span> Add Item
+      </button>
+      <button class="nav-item" data-view="log">
+        <span class="nav-ico">≣</span> Stock Movement Log
+      </button>
+    </nav>
+
+    <div class="sidebar-foot">
+      <button id="exportBtn" class="ghost-btn">Export CSV</button>
+      <button id="importBtn" class="ghost-btn">Import CSV</button>
+      <input type="file" id="importFile" accept=".csv" hidden>
+      <button id="seedBtn" class="ghost-btn subtle">Load sample data</button>
+      <button id="resetBtn" class="ghost-btn danger">Clear all data</button>
+      <p class="foot-note">Data is stored locally in this browser (no server required). Export CSV regularly to back up plant records.</p>
+    </div>
+  </aside>
+
+  <!-- ===== Main ===== -->
+  <main class="main">
+
+    <header class="topbar">
+      <h1 id="viewTitle">Dashboard</h1>
+      <div class="pressure-gauge-mini" id="clockGauge" title="Plant status: Nominal">
+        <span id="liveClock">--:--:--</span>
+      </div>
+    </header>
+
+    <!-- ---------- DASHBOARD VIEW ---------- -->
+    <section class="view" id="view-dashboard">
+      <div class="stat-grid" id="statGrid"></div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Stock Pressure — by Category</h2>
+          <span class="panel-sub">Gauge shows stock level relative to reorder threshold. Red zone = reorder now.</span>
+        </div>
+        <div class="gauge-grid" id="gaugeGrid"></div>
+      </div>
+
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Recent Stock Movements</h2>
+          <button class="link-btn" data-goto="log">View full log →</button>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table" id="recentLogTable">
+            <thead><tr><th>Date</th><th>Item</th><th>Type</th><th>Change</th><th>Resulting Qty</th><th>Reason</th></tr></thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- ---------- INVENTORY VIEW ---------- -->
+    <section class="view hidden" id="view-inventory">
+      <div class="filter-bar">
+        <input type="text" id="searchInput" placeholder="Search by item name, SKU or supplier…">
+
+        <select id="filterCategory">
+          <option value="">All Categories</option>
+        </select>
+
+        <select id="filterStatus">
+          <option value="">All Stock Status</option>
+          <option value="out">Out of Stock</option>
+          <option value="low">Low Stock</option>
+          <option value="normal">Normal</option>
+        </select>
+
+        <select id="sortBy">
+          <option value="name-asc">Name (A–Z)</option>
+          <option value="name-desc">Name (Z–A)</option>
+          <option value="qty-asc">Quantity (Low → High)</option>
+          <option value="qty-desc">Quantity (High → Low)</option>
+          <option value="updated-desc">Recently Updated</option>
+        </select>
+
+        <button id="clearFilters" class="ghost-btn small">Clear filters</button>
+      </div>
+
+      <div class="table-wrap">
+        <table class="data-table" id="inventoryTable">
+          <thead>
+            <tr>
+              <th>SKU</th>
+              <th>Item Name</th>
+              <th>Category</th>
+              <th>Qty</th>
+              <th>Unit</th>
+              <th>Reorder Level</th>
+              <th>Status</th>
+              <th>Location</th>
+              <th>Price/Unit (₹)</th>
+              <th>Supplier</th>
+              <th>Last Updated</th>
+              <th class="col-actions">Actions</th>
+            </tr>
+          </thead>
+          <tbody id="inventoryBody"></tbody>
+        </table>
+        <p class="empty-state hidden" id="inventoryEmpty">No items match your filters. Try clearing filters or add a new item.</p>
+      </div>
+    </section>
+
+    <!-- ---------- ADD / EDIT ITEM VIEW ---------- -->
+    <section class="view hidden" id="view-add">
+      <form class="panel form-panel" id="itemForm">
+        <div class="panel-head">
+          <h2 id="formTitle">Add New Item</h2>
+          <span class="panel-sub">Fill in item details as they appear on the plant register / gate pass.</span>
+        </div>
+
+        <input type="hidden" id="itemId">
+
+        <div class="form-grid">
+          <label class="field">
+            <span>Item Name *</span>
+            <input type="text" id="f_name" required placeholder="e.g. Filled Cylinder 14.2kg (Bharat Gas)">
+          </label>
+
+          <label class="field">
+            <span>SKU / Batch No. *</span>
+            <input type="text" id="f_sku" required placeholder="e.g. HLD-FC142-0001">
+          </label>
+
+          <label class="field">
+            <span>Category *</span>
+            <select id="f_category" required></select>
+          </label>
+
+          <label class="field">
+            <span>Unit *</span>
+            <select id="f_unit" required>
+              <option value="Nos">Nos (Cylinders/Units)</option>
+              <option value="Kg">Kg</option>
+              <option value="Litres">Litres</option>
+              <option value="KL">KL (Kilolitres)</option>
+            </select>
+          </label>
+
+          <label class="field">
+            <span>Opening Quantity *</span>
+            <input type="number" id="f_qty" min="0" step="1" required placeholder="0">
+          </label>
+
+          <label class="field">
+            <span>Reorder Level *</span>
+            <input type="number" id="f_reorder" min="0" step="1" required placeholder="Minimum qty before reorder alert">
+          </label>
+
+          <label class="field">
+            <span>Price per Unit (₹)</span>
+            <input type="number" id="f_price" min="0" step="0.01" placeholder="0.00">
+          </label>
+
+          <label class="field">
+            <span>Supplier / Source</span>
+            <input type="text" id="f_supplier" placeholder="e.g. IOCL Haldia Depot">
+          </label>
+
+          <label class="field">
+            <span>Godown / Location</span>
+            <input type="text" id="f_location" placeholder="e.g. Shed A - Filled Yard">
+          </label>
+
+          <label class="field field-wide">
+            <span>Remarks</span>
+            <textarea id="f_remarks" rows="2" placeholder="Any additional notes (safety checks, batch info, etc.)"></textarea>
+          </label>
+        </div>
+
+        <div class="form-actions">
+          <button type="submit" class="primary-btn" id="submitBtn">Add Item to Inventory</button>
+          <button type="button" class="ghost-btn" id="cancelEditBtn">Cancel</button>
+        </div>
+      </form>
+    </section>
+
+    <!-- ---------- LOG VIEW ---------- -->
+    <section class="view hidden" id="view-log">
+      <div class="panel">
+        <div class="panel-head">
+          <h2>Full Stock Movement Log</h2>
+          <span class="panel-sub">Every quantity amendment is recorded here for audit purposes.</span>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table" id="fullLogTable">
+            <thead><tr><th>Date &amp; Time</th><th>Item</th><th>SKU</th><th>Type</th><th>Change</th><th>Resulting Qty</th><th>Reason / Note</th></tr></thead>
+            <tbody></tbody>
+          </table>
+          <p class="empty-state hidden" id="logEmpty">No stock movements recorded yet.</p>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- ===== Amend Quantity Modal ===== -->
+<div class="modal-overlay hidden" id="amendModal">
+  <div class="modal">
+    <h3>Amend Quantity — <span id="amendItemName"></span></h3>
+    <p class="modal-current">Current quantity: <strong id="amendCurrentQty"></strong> <span id="amendUnit"></span></p>
+
+    <div class="amend-type-toggle">
+      <button type="button" class="amend-type active" data-type="IN">Stock In (+)</button>
+      <button type="button" class="amend-type" data-type="OUT">Stock Out (−)</button>
+      <button type="button" class="amend-type" data-type="ADJUST">Set Exact Qty</button>
+    </div>
+
+    <label class="field">
+      <span id="amendQtyLabel">Quantity to Add</span>
+      <input type="number" id="amendQtyInput" min="0" step="1" placeholder="0">
+    </label>
+
+    <label class="field">
+      <span>Reason</span>
+      <select id="amendReason">
+        <option>Received from Bottling Line</option>
+        <option>Dispatched to Distributor</option>
+        <option>Received from Supplier</option>
+        <option>Returned Empty Cylinder</option>
+        <option>Damaged / Rejected</option>
+        <option>Physical Stock Correction</option>
+        <option>Other</option>
+      </select>
+    </label>
+
+    <p class="amend-preview" id="amendPreview"></p>
+
+    <div class="form-actions">
+      <button type="button" class="primary-btn" id="amendConfirmBtn">Confirm</button>
+      <button type="button" class="ghost-btn" id="amendCancelBtn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== Delete Confirm Modal ===== -->
+<div class="modal-overlay hidden" id="deleteModal">
+  <div class="modal modal-narrow">
+    <h3>Delete Item?</h3>
+    <p>This will permanently remove <strong id="deleteItemName"></strong> from inventory. This cannot be undone.</p>
+    <div class="form-actions">
+      <button type="button" class="danger-btn" id="deleteConfirmBtn">Delete Permanently</button>
+      <button type="button" class="ghost-btn" id="deleteCancelBtn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
