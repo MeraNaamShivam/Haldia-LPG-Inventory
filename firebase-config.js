@@ -27,10 +27,10 @@
    ========================================================= */
 
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_PROJECT_ID.appspot.com",
-  messagingSenderId: "YOUR_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyCfk39IKGx_ZLUV_bgff0EhoXOf8vIDys4",
+  authDomain: "haldia-lpg-inventory.firebaseapp.com",
+  projectId: "haldia-lpg-inventory",
+  storageBucket: "haldia-lpg-inventory.firebasestorage.app",
+  messagingSenderId: "260105854006",
+  appId: "1:260105854006:web:b770a86b74e6061ba84c97"
 };
