@@ -1,12 +1,28 @@
 /* =========================================================
    Haldia LPG Bottling Plant — Inventory Control
-   Pure client-side app. Data persists in localStorage so it
-   works fully offline and can be hosted as a static site
-   (e.g. GitHub Pages) with zero backend.
+   Client-side app. If firebase-config.js is filled in with a
+   real Firebase project, data is stored in Firestore and
+   synced live across every device that opens this URL. If
+   not configured, it falls back to this browser's
+   localStorage only (single device, works offline).
    ========================================================= */
 
 const STORAGE_KEY   = 'haldia_lpg_inventory_items';
 const LOG_KEY        = 'haldia_lpg_inventory_log';
+
+/* ---------------- cloud sync (Firebase Firestore) ---------------- */
+const CLOUD_ENABLED = (typeof firebaseConfig !== 'undefined') &&
+  firebaseConfig.apiKey && !String(firebaseConfig.apiKey).startsWith('YOUR_');
+
+let cloudDocRef = null;
+let cloudReady = false;       // true once the first snapshot has arrived
+let applyingRemoteUpdate = false; // guards against write-loop when snapshot fires from our own write
+
+if (CLOUD_ENABLED) {
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+  cloudDocRef = db.collection('haldia_lpg_inventory').doc('plant_data');
+}
 
 const CATEGORIES = [
   'Filled Cylinder - 14.2kg (Domestic)',
@@ -41,11 +57,82 @@ function load(key, fallback){
     return raw ? JSON.parse(raw) : fallback;
   }catch(e){ return fallback; }
 }
-function persist(){
+
+// Always keep a local cache (fast load, offline fallback) in addition to cloud.
+function persistLocalCache(){
   localStorage.setItem(STORAGE_KEY, JSON.stringify(state.items));
   localStorage.setItem(LOG_KEY, JSON.stringify(state.log));
 }
+
+// Call this after ANY mutation to state.items / state.log.
+function persist(){
+  persistLocalCache();
+  if (CLOUD_ENABLED && cloudDocRef && !applyingRemoteUpdate) {
+    setSyncStatus('saving');
+    cloudDocRef.set({
+      items: state.items,
+      log: state.log,
+      updatedAt: new Date().toISOString()
+    }).then(()=> setSyncStatus('synced'))
+      .catch(err=>{
+        console.error('Cloud save failed:', err);
+        setSyncStatus('error');
+        toast('Could not save to cloud — check your internet connection.');
+      });
+  }
+}
+
 function uid(prefix){ return prefix + '_' + Date.now().toString(36) + Math.random().toString(36).slice(2,7); }
+
+/* ---------------- cloud sync status indicator ---------------- */
+function setSyncStatus(status){
+  const el = document.getElementById('clockGauge');
+  if(!el) return;
+  const labels = {
+    local:   'Local only — not shared (see README)',
+    connecting: 'Connecting to shared inventory…',
+    synced:  'Synced — shared across all devices',
+    saving:  'Saving…',
+    error:   'Sync error — check connection'
+  };
+  const colors = { local:'#9AA3AB', connecting:'#F08C00', synced:'#2F9E44', saving:'#2B6CB0', error:'#E03131' };
+  el.title = labels[status] || '';
+  el.style.setProperty('--dot-color', colors[status] || '#9AA3AB');
+  el.querySelector('.sync-dot')?.remove();
+  const dot = document.createElement('span');
+  dot.className = 'sync-dot';
+  dot.style.cssText = `width:8px;height:8px;border-radius:50%;background:${colors[status]};box-shadow:0 0 0 3px ${colors[status]}30;margin-right:2px;`;
+  el.prepend(dot);
+}
+
+// Subscribes to the shared Firestore doc and keeps all connected devices in sync live.
+function initCloudSync(){
+  if (!CLOUD_ENABLED) { setSyncStatus('local'); return; }
+  setSyncStatus('connecting');
+  cloudDocRef.onSnapshot(doc=>{
+    applyingRemoteUpdate = true;
+    if (doc.exists) {
+      const data = doc.data();
+      state.items = data.items || [];
+      state.log = data.log || [];
+    } else {
+      // First time this project's Firestore doc is used — seed it with
+      // whatever is currently in local storage (e.g. from before cloud setup).
+      cloudDocRef.set({ items: state.items, log: state.log, updatedAt: new Date().toISOString() });
+    }
+    persistLocalCache();
+    applyingRemoteUpdate = false;
+    cloudReady = true;
+    setSyncStatus('synced');
+    renderDashboard();
+    renderInventory();
+    renderFullLog();
+  }, err=>{
+    console.error('Cloud sync error:', err);
+    setSyncStatus('error');
+    toast('Could not connect to shared inventory — showing local data only.');
+  });
+}
 
 /* ---------------- status helpers ---------------- */
 function stockStatus(item){
@@ -660,3 +747,4 @@ tickClock();
 populateCategoryDropdowns();
 renderDashboard();
 renderInventory();
+initCloudSync();

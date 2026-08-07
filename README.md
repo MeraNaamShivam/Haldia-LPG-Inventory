@@ -18,13 +18,62 @@ A lightweight, no-backend inventory management web app built for an LPG bottling
 
 ## How data is stored
 
-This app has **no server or database** — all data lives in your browser's `localStorage`. That means:
+By default (before you configure anything) this app stores data in your browser's `localStorage` only — private to that one device/browser.
 
-- It works completely offline once loaded.
-- Data is private to the device/browser you use it on.
-- **Export to CSV regularly** (button in the sidebar) to keep a backup — clearing browser data or switching devices/browsers will lose unsaved data.
+**To make the SAME inventory accessible to anyone with your GitHub Pages URL, on any device, for free**, connect it to a free Firebase Firestore database — no server code required. See "Shared cloud storage" below.
 
-For a real multi-user plant deployment (multiple staff/terminals sharing one live inventory), you'd want to swap `localStorage` for a small backend (e.g. a simple REST API + database like SQLite/Postgres, or a service like Firebase/Supabase). The current data layer is isolated in `app.js` (`load()` / `persist()` functions) to make that swap straightforward later.
+Either way, **export to CSV regularly** (button in the sidebar) to keep a backup.
+
+## Shared cloud storage (Firebase — free)
+
+This is what makes the site a real multi-device tool: everyone who opens your URL sees and edits one shared, live-synced inventory. It uses Firebase's free "Spark" tier, which is enough for a single plant's inventory (well within the free quota of ~50k reads / 20k writes per day).
+
+### 1. Create a free Firebase project
+1. Go to [console.firebase.google.com](https://console.firebase.google.com) and sign in with any Google account.
+2. Click **Add project**, name it (e.g. `haldia-lpg-inventory`), and finish the wizard (you can disable Google Analytics — not needed).
+
+### 2. Register a web app and get your config
+1. On the project's Overview page, click the **`</>`** (Web) icon to add a web app.
+2. Give it a nickname and click **Register app**. Firebase Hosting is not needed — skip that step.
+3. Firebase shows a `firebaseConfig` object with your keys.
+
+### 3. Enable Firestore
+1. In the left sidebar: **Build → Firestore Database → Create database**.
+2. Choose a location close to your plant (e.g. `asia-south1` for India).
+3. Start in **test mode** for now (open access) — you'll lock this down in step 5.
+
+### 4. Add your config to the app
+1. Open `firebase-config.js` in this repo.
+2. Replace the placeholder values with the real ones from step 2.
+3. Commit and push — GitHub Pages will redeploy automatically within a minute or two.
+
+That's it — reload your site's URL and the little status dot next to the clock (top right) will turn **blue → green**, meaning it's now synced to the shared cloud database. Anyone who opens the same URL will see the same live inventory.
+
+### 5. Lock down Firestore security rules (important)
+
+Test mode leaves your database **open to the internet indefinitely on some setups, or expires after 30 days** — either way, tighten it. In Firebase Console → Firestore Database → **Rules**, replace the rules with:
+
+```
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /haldia_lpg_inventory/plant_data {
+      allow read, write: if true;
+    }
+  }
+}
+```
+
+This keeps the app exactly as requested — **anyone with your site's URL can read and write the inventory**, with no login required, which matches "anyone with that URL can access it on any device." It also scopes access to only this one document, rather than leaving your whole Firestore project open.
+
+If later you want to restrict *editing* to your plant staff only (e.g. so the public can't tamper with stock counts), the simplest upgrade is Firebase Anonymous Auth or a simple PIN-gate — ask if you'd like that added.
+
+### How syncing works under the hood
+
+- All inventory items + the full stock movement log are stored as one JSON document in Firestore (`haldia_lpg_inventory/plant_data`).
+- The app subscribes to that document in real time (`onSnapshot`), so a change made on one device (e.g. warehouse tablet) appears on every other open device (e.g. office computer) within a second or two, no refresh needed.
+- A local `localStorage` copy is still kept as a fast-loading cache and offline fallback — if the connection drops, the app keeps working from that cache and re-syncs once back online.
+- If `firebase-config.js` is left with placeholder values, the app silently falls back to local-only mode (the status dot shows grey — "Local only").
 
 ## Running locally
 
@@ -61,9 +110,10 @@ That URL is now a real, working inventory site you (or plant staff) can use from
 
 ```
 haldia-lpg-inventory/
-├── index.html   # page structure (dashboard, inventory table, forms, modals)
-├── style.css    # industrial-themed styling, fully responsive
-├── app.js       # all app logic: CRUD, filters, CSV import/export, localStorage
+├── index.html          # page structure (dashboard, inventory table, forms, modals)
+├── style.css           # industrial-themed styling, fully responsive
+├── app.js              # all app logic: CRUD, filters, CSV import/export, cloud sync
+├── firebase-config.js  # your Firebase project keys (safe to commit — see above)
 └── README.md
 ```
 

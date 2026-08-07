@@ -80,9 +80,8 @@ button, input, select, textarea{ font-family:inherit; font-size:14px; }
 .pressure-gauge-mini{
   font-family:var(--font-mono); font-size:13px; color:var(--text-mute);
   background:var(--panel); border:1px solid var(--line); border-radius:20px;
-  padding:6px 14px; display:flex; align-items:center; gap:8px;
+  padding:6px 14px; display:flex; align-items:center; gap:8px; cursor:default;
 }
-.pressure-gauge-mini::before{ content:''; width:8px; height:8px; border-radius:50%; background:var(--good); box-shadow:0 0 0 3px rgba(47,158,68,.18); }
 
 /* ===================== BUTTONS ===================== */
 .primary-btn{
